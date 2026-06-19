@@ -45,7 +45,7 @@ export default function Home() {
 
         if (data.ready) {
           setDeploying(false);
-          setMessage({ text: '✅ Vercel デプロイ完了！ファイルが公開されました', ok: true });
+          setMessage({ text: '✅ Vercel デプロイ完了', ok: true });
           if ('Notification' in window && Notification.permission === 'granted') {
             new Notification('デプロイ完了！', { body: 'Vercel へのデプロイが完了しました' });
           }
