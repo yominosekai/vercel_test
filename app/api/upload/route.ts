@@ -60,5 +60,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: err.message ?? 'アップロード失敗' }, { status: 500 });
   }
 
-  return NextResponse.json({ success: true });
+  const data = await res.json();
+  return NextResponse.json({ success: true, commitSha: data.commit?.sha ?? null });
 }

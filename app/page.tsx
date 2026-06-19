@@ -16,7 +16,9 @@ export default function Home() {
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null);
   const [dragging, setDragging] = useState(false);
+  const [deploying, setDeploying] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchFiles = useCallback(async () => {
     const res = await fetch('/api/files');
@@ -26,17 +28,61 @@ export default function Home() {
     }
   }, []);
 
-  useEffect(() => { fetchFiles(); }, [fetchFiles]);
+  useEffect(() => {
+    fetchFiles();
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+    return () => { if (pollRef.current) clearTimeout(pollRef.current); };
+  }, [fetchFiles]);
+
+  const pollDeployment = useCallback((sha: string, attempt = 0) => {
+    const MAX = 36; // 6分
+    pollRef.current = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/deploy-status?sha=${sha}`);
+        const data = await res.json();
+
+        if (data.ready) {
+          setDeploying(false);
+          setMessage({ text: '✅ Vercel デプロイ完了！ファイルが公開されました', ok: true });
+          if ('Notification' in window && Notification.permission === 'granted') {
+            new Notification('デプロイ完了！', { body: 'Vercel へのデプロイが完了しました' });
+          }
+          return;
+        }
+
+        if (data.state === 'failure' || data.state === 'error') {
+          setDeploying(false);
+          setMessage({ text: '❌ Vercel デプロイ失敗', ok: false });
+          return;
+        }
+
+        if (attempt < MAX) {
+          pollDeployment(sha, attempt + 1);
+        } else {
+          setDeploying(false);
+        }
+      } catch {
+        if (attempt < MAX) pollDeployment(sha, attempt + 1);
+      }
+    }, 10000);
+  }, []);
 
   const upload = async (file: File) => {
+    if (pollRef.current) clearTimeout(pollRef.current);
     setUploading(true);
+    setDeploying(false);
     setMessage({ text: `"${file.name}" をアップロード中...`, ok: true });
     const form = new FormData();
     form.append('file', file);
     const res = await fetch('/api/upload', { method: 'POST', body: form });
     if (res.ok) {
-      setMessage({ text: `✓ "${file.name}" をGitHubにプッシュしました。Vercelが自動デプロイ中（約1〜2分）`, ok: true });
+      const data = await res.json();
+      setMessage({ text: `✓ GitHub にプッシュしました。Vercel デプロイ待機中...`, ok: true });
+      setDeploying(true);
       await fetchFiles();
+      if (data.commitSha) pollDeployment(data.commitSha);
     } else {
       const err = await res.json();
       setMessage({ text: `エラー: ${err.error}`, ok: false });
@@ -107,12 +153,21 @@ export default function Home() {
 
         {/* Status Message */}
         {message && (
-          <div
-            className={`rounded-lg px-4 py-3 mb-4 text-sm ${
-              message.ok ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
-            }`}
-          >
+          <div className={`rounded-lg px-4 py-3 mb-2 text-sm ${
+            message.ok ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+          }`}>
             {message.text}
+          </div>
+        )}
+
+        {/* Deploy Progress Indicator */}
+        {deploying && (
+          <div className="rounded-lg px-4 py-3 mb-4 text-sm bg-blue-50 text-blue-700 flex items-center gap-2">
+            <svg className="animate-spin h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4l3-3-3-3v4a8 8 0 00-8 8h4z" />
+            </svg>
+            Vercel デプロイ中... 完了時にここと通知でお知らせします
           </div>
         )}
 
