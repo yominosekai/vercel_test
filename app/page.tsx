@@ -62,9 +62,15 @@ export default function Home() {
           pollDeployment(sha, attempt + 1);
         } else {
           setDeploying(false);
+          setMessage({ text: '⚠️ デプロイ状態を確認できませんでした（Vercel管理画面を確認してください）', ok: false });
         }
       } catch {
-        if (attempt < MAX) pollDeployment(sha, attempt + 1);
+        if (attempt < MAX) {
+          pollDeployment(sha, attempt + 1);
+        } else {
+          setDeploying(false);
+          setMessage({ text: '⚠️ デプロイ状態を確認できませんでした（Vercel管理画面を確認してください）', ok: false });
+        }
       }
     }, 10000);
   }, []);
